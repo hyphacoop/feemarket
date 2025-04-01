@@ -57,12 +57,13 @@ func NewFeeMarketCheckDecorator(ak AccountKeeper, bk BankKeeper, fk FeeGrantKeep
 // AnteHandle calls the feemarket internal antehandler if the keeper is enabled.  If disabled, the fallback
 // fee antehandler is fallen back to.
 func (d FeeMarketCheckDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (newCtx sdk.Context, err error) {
-	params, err := d.feemarketKeeper.GetParams(ctx)
+	params, err := d.feemarketKeeper.GetParamsFast(ctx)
 	if err != nil {
 		return ctx, err
 	}
-	if params.Enabled {
-		return d.feemarketDecorator.anteHandle(ctx, tx, simulate, next)
+	defer params.Release()
+	if params.Value.Enabled {
+		return d.feemarketDecorator.anteHandle(ctx, tx, simulate, params.Value, next)
 	}
 
 	// only use fallback if not nil
@@ -74,7 +75,7 @@ func (d FeeMarketCheckDecorator) AnteHandle(ctx sdk.Context, tx sdk.Tx, simulate
 }
 
 // anteHandle checks if the tx provides sufficient fee to cover the required fee from the fee market.
-func (dfd feeMarketCheckDecorator) anteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, next sdk.AnteHandler) (sdk.Context, error) {
+func (dfd feeMarketCheckDecorator) anteHandle(ctx sdk.Context, tx sdk.Tx, simulate bool, params *feemarkettypes.Params, next sdk.AnteHandler) (sdk.Context, error) {
 	// GenTx consume no fee
 	if ctx.BlockHeight() == 0 {
 		return next(ctx, tx, simulate)
@@ -87,11 +88,6 @@ func (dfd feeMarketCheckDecorator) anteHandle(ctx sdk.Context, tx sdk.Tx, simula
 
 	if !simulate && ctx.BlockHeight() > 0 && feeTx.GetGas() == 0 {
 		return ctx, sdkerrors.ErrInvalidGasLimit.Wrapf("must provide positive gas")
-	}
-
-	params, err := dfd.feemarketKeeper.GetParams(ctx)
-	if err != nil {
-		return ctx, errorsmod.Wrapf(err, "unable to get fee market params")
 	}
 
 	// return if disabled
@@ -116,6 +112,12 @@ func (dfd feeMarketCheckDecorator) anteHandle(ctx sdk.Context, tx sdk.Tx, simula
 	}
 
 	feeGas := int64(feeTx.GetGas())
+
+	state, err := dfd.feemarketKeeper.GetStateFast(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	defer state.Release()
 
 	minGasPrice, err := dfd.feemarketKeeper.GetMinGasPrice(ctx, payCoin.GetDenom())
 	if err != nil {

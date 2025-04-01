@@ -7,6 +7,7 @@ import (
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
 
+	sdkmath "cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -19,6 +20,9 @@ type Keeper struct {
 	storeKey storetypes.StoreKey
 	ak       types.AccountKeeper
 	resolver types.DenomResolver
+
+	paramsPool *types.MessagePool[*types.Params]
+	statePool  *types.MessagePool[*types.State]
 
 	// The address that is capable of executing a MsgParams message.
 	// Typically, this will be the governance module's address.
@@ -43,6 +47,24 @@ func NewKeeper(
 		ak:        authKeeper,
 		resolver:  resolver,
 		authority: authority,
+		paramsPool: types.NewMessagePool(func() *types.Params {
+			return &types.Params{
+				Alpha:           sdkmath.LegacyOneDec(),
+				Beta:            sdkmath.LegacyOneDec(),
+				Gamma:           sdkmath.LegacyOneDec(),
+				Delta:           sdkmath.LegacyOneDec(),
+				MinBaseGasPrice: sdkmath.LegacyOneDec(),
+				MinLearningRate: sdkmath.LegacyOneDec(),
+				MaxLearningRate: sdkmath.LegacyOneDec(),
+			}
+		}),
+		statePool: types.NewMessagePool(func() *types.State {
+			return &types.State{
+				BaseGasPrice: sdkmath.LegacyZeroDec(),
+				LearningRate: sdkmath.LegacyZeroDec(),
+				Window:       make([]uint64, 0, 10),
+			}
+		}),
 	}
 
 	return k
@@ -109,6 +131,34 @@ func (k *Keeper) GetState(ctx sdk.Context) (types.State, error) {
 	return state, nil
 }
 
+type pooledKVStore interface {
+	storetypes.KVStore
+	Release()
+}
+
+// GetStateFast returns the feemarket module's state as a pooled message.
+// Callers MUST call state.Release() when they are done with the state.
+// This method is intended for use in hot paths (e.g. ante/post handlers).
+func (k *Keeper) GetStateFast(ctx sdk.Context) (types.PooledMessage[*types.State], error) {
+	store := ctx.KVStore(k.storeKey)
+	if store, ok := store.(pooledKVStore); ok {
+		defer store.Release()
+	}
+
+	key := types.KeyState
+	bz := store.Get(key)
+
+	state := k.statePool.Get()
+	// clear out the window
+	state.Value.Window = state.Value.Window[:0]
+	if err := state.Value.Unmarshal(bz); err != nil {
+		state.Release()
+		return types.PooledMessage[*types.State]{}, err
+	}
+
+	return state, nil
+}
+
 // SetState sets the feemarket module's state.
 func (k *Keeper) SetState(ctx sdk.Context, state types.State) error {
 	store := ctx.KVStore(k.storeKey)
@@ -133,6 +183,27 @@ func (k *Keeper) GetParams(ctx sdk.Context) (types.Params, error) {
 	params := types.Params{}
 	if err := params.Unmarshal(bz); err != nil {
 		return types.Params{}, err
+	}
+
+	return params, nil
+}
+
+// GetParamsFast returns the feemarket module's parameters as a pooled message.
+// Callers MUST call params.Release() when they are done with the parameters.
+// This method is intended for use in hot paths (e.g. ante/post handlers).
+func (k *Keeper) GetParamsFast(ctx sdk.Context) (types.PooledMessage[*types.Params], error) {
+	store := ctx.KVStore(k.storeKey)
+	if store, ok := store.(pooledKVStore); ok {
+		defer store.Release()
+	}
+
+	key := types.KeyParams
+	bz := store.Get(key)
+
+	params := k.paramsPool.Get()
+	if err := params.Value.Unmarshal(bz); err != nil {
+		params.Release()
+		return types.PooledMessage[*types.Params]{}, err
 	}
 
 	return params, nil

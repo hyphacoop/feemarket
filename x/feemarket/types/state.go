@@ -25,7 +25,7 @@ func NewState(
 
 // Update updates the block utilization for the current height with the given
 // transaction utilization i.e. gas limit.
-func (s *State) Update(gas uint64, params Params) error {
+func (s *State) Update(gas uint64, params *Params) error {
 	update := s.Window[s.Index] + gas
 	if update > params.MaxBlockUtilization {
 		return fmt.Errorf("block utilization of %d cannot exceed max block utilization of %d", update, params.MaxBlockUtilization)

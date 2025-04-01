@@ -57,13 +57,14 @@ func (dfd FeeMarketDeductDecorator) PostHandle(ctx sdk.Context, tx sdk.Tx, simul
 	}
 
 	// update fee market params
-	params, err := dfd.feemarketKeeper.GetParams(ctx)
+	params, err := dfd.feemarketKeeper.GetParamsFast(ctx)
 	if err != nil {
 		return ctx, errorsmod.Wrapf(err, "unable to get fee market params")
 	}
+	defer params.Release()
 
 	// return if disabled
-	if !params.Enabled {
+	if !params.Value.Enabled {
 		return next(ctx, tx, simulate, success)
 	}
 
@@ -78,10 +79,11 @@ func (dfd FeeMarketDeductDecorator) PostHandle(ctx sdk.Context, tx sdk.Tx, simul
 	}
 
 	// update fee market state
-	state, err := dfd.feemarketKeeper.GetState(ctx)
+	state, err := dfd.feemarketKeeper.GetStateFast(ctx)
 	if err != nil {
 		return ctx, errorsmod.Wrapf(err, "unable to get fee market state")
 	}
+	defer state.Release()
 
 	feeCoins := feeTx.GetFee()
 	gas := ctx.GasMeter().GasConsumed() // use context gas consumed
@@ -95,8 +97,8 @@ func (dfd FeeMarketDeductDecorator) PostHandle(ctx sdk.Context, tx sdk.Tx, simul
 
 	// if simulating and user did not provider a fee - create a dummy value for them
 	var (
-		tip     = sdk.NewCoin(params.FeeDenom, math.ZeroInt())
-		payCoin = sdk.NewCoin(params.FeeDenom, math.ZeroInt())
+		tip     = sdk.NewCoin(params.Value.FeeDenom, math.ZeroInt())
+		payCoin = sdk.NewCoin(params.Value.FeeDenom, math.ZeroInt())
 	)
 	if !simulate {
 		payCoin = feeCoins[0]
@@ -130,12 +132,12 @@ func (dfd FeeMarketDeductDecorator) PostHandle(ctx sdk.Context, tx sdk.Tx, simul
 		return ctx, err
 	}
 
-	err = state.Update(gas, params)
+	err = state.Value.Update(gas, params.Value)
 	if err != nil {
 		return ctx, errorsmod.Wrapf(err, "unable to update fee market state")
 	}
 
-	err = dfd.feemarketKeeper.SetState(ctx, state)
+	err = dfd.feemarketKeeper.SetState(ctx, *state.Value)
 	if err != nil {
 		return ctx, errorsmod.Wrapf(err, "unable to set fee market state")
 	}
@@ -151,16 +153,17 @@ func (dfd FeeMarketDeductDecorator) PostHandle(ctx sdk.Context, tx sdk.Tx, simul
 // PayOutFeeAndTip deducts the provided fee and tip from the fee payer.
 // If the tx uses a feegranter, the fee granter address will pay the fee instead of the tx signer.
 func (dfd FeeMarketDeductDecorator) PayOutFeeAndTip(ctx sdk.Context, fee, tip sdk.Coin) error {
-	params, err := dfd.feemarketKeeper.GetParams(ctx)
+	params, err := dfd.feemarketKeeper.GetParamsFast(ctx)
 	if err != nil {
 		return fmt.Errorf("error getting feemarket params: %v", err)
 	}
+	defer params.Release()
 
 	var events sdk.Events
 
 	// deduct the fees and tip
 	if !fee.IsNil() {
-		err := DeductCoins(dfd.bankKeeper, ctx, sdk.NewCoins(fee), params.DistributeFees)
+		err := DeductCoins(dfd.bankKeeper, ctx, sdk.NewCoins(fee), params.Value.DistributeFees)
 		if err != nil {
 			return err
 		}
