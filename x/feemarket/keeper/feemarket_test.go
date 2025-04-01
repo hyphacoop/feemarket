@@ -96,7 +96,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 
 		// Reaching the target block size means that we expect this to not
 		// increase.
-		err := state.Update(params.TargetBlockUtilization(), params)
+		err := state.Update(params.TargetBlockUtilization(), &params)
 		s.Require().NoError(err)
 
 		s.setGenesisState(params, state)
@@ -120,7 +120,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 		state.BaseGasPrice = state.BaseGasPrice.Mul(math.LegacyNewDec(2))
 		// Reaching the target block size means that we expect this to not
 		// increase.
-		err := state.Update(params.TargetBlockUtilization(), params)
+		err := state.Update(params.TargetBlockUtilization(), &params)
 		s.Require().NoError(err)
 
 		s.setGenesisState(params, state)
@@ -143,7 +143,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 
 		// Reaching the target block size means that we expect this to not
 		// increase.
-		err := state.Update(params.MaxBlockUtilization, params)
+		err := state.Update(params.MaxBlockUtilization, &params)
 		s.Require().NoError(err)
 
 		s.setGenesisState(params, state)
@@ -170,7 +170,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 		state.BaseGasPrice = state.BaseGasPrice.Mul(math.LegacyNewDec(2))
 		// Reaching the target block size means that we expect this to not
 		// increase.
-		err := state.Update(params.MaxBlockUtilization, params)
+		err := state.Update(params.MaxBlockUtilization, &params)
 		s.Require().NoError(err)
 
 		s.setGenesisState(params, state)
@@ -195,7 +195,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 		params := types.DefaultParams()
 		params.MaxBlockUtilization = 100
 
-		err := state.Update(25, params)
+		err := state.Update(25, &params)
 		s.Require().NoError(err)
 
 		s.setGenesisState(params, state)
@@ -218,7 +218,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 
 		params := types.DefaultParams()
 		params.MaxBlockUtilization = 100
-		err := state.Update(25, params)
+		err := state.Update(25, &params)
 
 		s.Require().NoError(err)
 
@@ -244,7 +244,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 		params := types.DefaultParams()
 		params.MaxBlockUtilization = 100
 
-		err := state.Update(75, params)
+		err := state.Update(75, &params)
 		s.Require().NoError(err)
 
 		s.setGenesisState(params, state)
@@ -270,7 +270,7 @@ func (s *KeeperTestSuite) TestUpdateFeeMarket() {
 		params := types.DefaultParams()
 		params.MaxBlockUtilization = 100
 
-		err := state.Update(75, params)
+		err := state.Update(75, &params)
 		s.Require().NoError(err)
 
 		s.setGenesisState(params, state)

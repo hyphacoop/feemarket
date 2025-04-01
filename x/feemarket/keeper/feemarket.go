@@ -3,6 +3,7 @@ package keeper
 import (
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/skip-mev/feemarket/x/feemarket/types"
 )
 
 // UpdateFeeMarket updates the base fee and learning rate based on the
@@ -55,12 +56,13 @@ func (k *Keeper) UpdateFeeMarket(ctx sdk.Context) error {
 
 // GetBaseGasPrice returns the base fee from the fee market state.
 func (k *Keeper) GetBaseGasPrice(ctx sdk.Context) (math.LegacyDec, error) {
-	state, err := k.GetState(ctx)
+	state, err := k.GetStateFast(ctx)
 	if err != nil {
 		return math.LegacyDec{}, err
 	}
+	defer state.Release()
 
-	return state.BaseGasPrice, nil
+	return state.Value.BaseGasPrice, nil
 }
 
 // GetLearningRate returns the learning rate from the fee market state.
@@ -80,17 +82,18 @@ func (k *Keeper) GetMinGasPrice(ctx sdk.Context, denom string) (sdk.DecCoin, err
 		return sdk.DecCoin{}, err
 	}
 
-	params, err := k.GetParams(ctx)
+	params, err := k.GetParamsFast(ctx)
 	if err != nil {
 		return sdk.DecCoin{}, err
 	}
+	defer params.Release()
 
 	var gasPrice sdk.DecCoin
 
-	if params.FeeDenom == denom {
-		gasPrice = sdk.NewDecCoinFromDec(params.FeeDenom, baseGasPrice)
+	if params.Value.FeeDenom == denom {
+		gasPrice = sdk.NewDecCoinFromDec(params.Value.FeeDenom, baseGasPrice)
 	} else {
-		gasPrice, err = k.ResolveToDenom(ctx, sdk.NewDecCoinFromDec(params.FeeDenom, baseGasPrice), denom)
+		gasPrice, err = k.ResolveToDenom(ctx, sdk.NewDecCoinFromDec(params.Value.FeeDenom, baseGasPrice), denom)
 		if err != nil {
 			return sdk.DecCoin{}, err
 		}
@@ -133,4 +136,18 @@ func (k *Keeper) GetMinGasPrices(ctx sdk.Context) (sdk.DecCoins, error) {
 	}
 
 	return minGasPrices, nil
+}
+
+// GetMinGasPriceFast returns the minimum gas price for the given denom without fetching the state or params.
+// This function is allocation-optimized by taking the state and params directly, and should be used in hot paths
+// like ante and post handlers.
+func (k *Keeper) GetMinGasPriceFast(ctx sdk.Context, denom string, state *types.State, params *types.Params) (sdk.DecCoin, error) {
+	// If the requested denom matches the fee denom, we can avoid the conversion
+	if params.FeeDenom == denom {
+		return sdk.NewDecCoinFromDec(params.FeeDenom, state.BaseGasPrice), nil
+	}
+
+	// Otherwise we need to convert the denom
+	// This still allocates but we can't avoid it - we need a conversion
+	return k.ResolveToDenom(ctx, sdk.NewDecCoinFromDec(params.FeeDenom, state.BaseGasPrice), denom)
 }

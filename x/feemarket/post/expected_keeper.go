@@ -38,7 +38,9 @@ type BankKeeper interface {
 //go:generate mockery --name FeeMarketKeeper --filename mock_feemarket_keeper.go
 type FeeMarketKeeper interface {
 	GetState(ctx sdk.Context) (feemarkettypes.State, error)
+	GetStateFast(ctx sdk.Context) (feemarkettypes.PooledMessage[*feemarkettypes.State], error)
 	GetParams(ctx sdk.Context) (feemarkettypes.Params, error)
+	GetParamsFast(ctx sdk.Context) (feemarkettypes.PooledMessage[*feemarkettypes.Params], error)
 	SetParams(ctx sdk.Context, params feemarkettypes.Params) error
 	SetState(ctx sdk.Context, state feemarkettypes.State) error
 	ResolveToDenom(ctx sdk.Context, coin sdk.DecCoin, denom string) (sdk.DecCoin, error)
